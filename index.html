@@ -101,7 +101,9 @@
             }
 
             try {
-                const decodedString = atob(encodedInput.value);
+                // Pre-process the string to replace unicode escape for '+' with the actual character.
+                const processedString = encodedInput.value.replace(/\\u002B/g, '+');
+                const decodedString = atob(processedString);
                 try {
                     const jsonObject = JSON.parse(decodedString);
                     decodedOutput.value = JSON.stringify(jsonObject, null, 4);
