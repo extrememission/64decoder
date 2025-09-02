@@ -3,77 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local Base64 & JSON Tool</title>
+    <title>Local Base64 & JSON Round-Trip Tool</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
-        }
-        .tooltip {
-            position: relative;
-            display: inline-block;
-        }
-        .tooltip .tooltiptext {
-            visibility: hidden;
-            width: 140px;
-            background-color: #555;
-            color: #fff;
-            text-align: center;
-            border-radius: 6px;
-            padding: 5px;
-            position: absolute;
-            z-index: 1;
-            bottom: 150%;
-            left: 50%;
-            margin-left: -70px;
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        .tooltip .tooltiptext::after {
-            content: "";
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            margin-left: -5px;
-            border-width: 5px;
-            border-style: solid;
-            border-color: #555 transparent transparent transparent;
-        }
-        .tooltip:hover .tooltiptext {
-            visibility: visible;
-            opacity: 1;
         }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 flex items-center justify-center min-h-screen p-4">
     <div class="w-full max-w-6xl p-8 space-y-6 bg-gray-800 rounded-lg shadow-lg">
         <div>
-            <h1 class="text-3xl font-bold text-center text-white">Secure Base64 & JSON Tool</h1>
-            <p class="text-center text-gray-400 mt-2">All encoding and decoding happens locally in your browser.</p>
+            <h1 class="text-3xl font-bold text-center text-white">Secure Base64 & JSON Round-Trip Tool</h1>
+            <p class="text-center text-gray-400 mt-2">Like a phonograph, this tool can "play back" (decode) and "record" (encode).</p>
         </div>
 
         <div class="grid md:grid-cols-2 gap-8 items-start">
-            <!-- Encoded Side -->
+            <!-- Input Side -->
             <div class="space-y-4">
                 <div class="flex justify-between items-center">
-                    <label for="encoded-input" class="text-lg font-medium text-gray-300">Encoded String</label>
-                    <button id="copy-encoded" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Copy</button>
+                    <label for="encoded-input" class="text-lg font-medium text-gray-300">Input / Output</label>
+                    <button id="copy-input" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Copy</button>
                 </div>
-                <textarea id="encoded-input" rows="15" class="w-full p-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Paste your encoded text string here..."></textarea>
+                <textarea id="encoded-input" rows="15" class="w-full p-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Paste your text with encoded strings here..."></textarea>
                 <button id="decode-button" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-semibold transition-colors">
-                    &darr; Decode &darr;
+                    &darr; Decode All &darr;
                 </button>
             </div>
 
-            <!-- Decoded Side -->
+            <!-- Editable Output Side -->
             <div class="space-y-4">
                  <div class="flex justify-between items-center">
-                    <label for="decoded-output" class="text-lg font-medium text-gray-300">Decoded JSON</label>
+                    <label for="decoded-output" class="text-lg font-medium text-gray-300">Edit Decoded Text</label>
                     <button id="copy-decoded" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Copy</button>
                 </div>
-                <textarea id="decoded-output" rows="15" class="w-full p-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200 focus:ring-2 focus:ring-green-500 focus:border-green-500" placeholder="Decoded JSON will appear here..."></textarea>
+                <textarea id="decoded-output" rows="15" class="w-full p-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200 focus:ring-2 focus:ring-green-500 focus:border-green-500" placeholder="Editable decoded text will appear here..."></textarea>
                 <button id="encode-button" class="w-full py-3 px-4 bg-green-600 hover:bg-green-700 rounded-md text-white font-semibold transition-colors">
-                    &uarr; Encode &uarr;
+                    &uarr; Encode All &uarr;
                 </button>
             </div>
         </div>
@@ -87,54 +53,125 @@
         const decodedOutput = document.getElementById('decoded-output');
         const errorMessage = document.getElementById('error-message');
 
+        // This will store the parts of the string that are NOT base64
+        let textFragments = [];
+        // This will store whether a decoded part was originally JSON
+        let wasJson = [];
+
         function clearState() {
             errorMessage.textContent = '';
         }
 
         document.getElementById('decode-button').addEventListener('click', () => {
             clearState();
-            decodedOutput.value = '';
-
-            if (!encodedInput.value) {
-                errorMessage.textContent = 'Encoded input cannot be empty.';
+            const rawInput = encodedInput.value;
+            if (!rawInput) {
+                errorMessage.textContent = 'Input cannot be empty.';
                 return;
             }
 
-            try {
-                // Pre-process the string to replace unicode escape for '+' with the actual character.
-                const processedString = encodedInput.value.replace(/\\u002B/g, '+');
-                const decodedString = atob(processedString);
+            textFragments = [];
+            wasJson = [];
+            const decodedParts = [];
+            
+            // Regex to find potential base64 strings (long sequences of valid chars)
+            const base64Regex = /([A-Za-z0-9+/=]{20,})|([A-Za-z0-9+/=]+\\u002B[A-Za-z0-9+/=]+)/g;
+            let lastIndex = 0;
+            let match;
+            let replacements = 0;
+
+            while ((match = base64Regex.exec(rawInput)) !== null) {
+                const potentialString = match[0];
                 try {
-                    const jsonObject = JSON.parse(decodedString);
-                    decodedOutput.value = JSON.stringify(jsonObject, null, 4);
-                } catch (jsonError) {
-                    decodedOutput.value = decodedString;
-                    errorMessage.textContent = 'Note: Decoded text was not valid JSON, showing raw output.';
+                    const cleanString = potentialString.replace(/\\u002B/g, '+');
+                    const decodedString = atob(cleanString);
+                    
+                    // If we are here, it's a valid Base64 string.
+                    replacements++;
+                    
+                    // Store the text before this match
+                    textFragments.push(rawInput.substring(lastIndex, match.index));
+                    lastIndex = match.index + potentialString.length;
+                    
+                    // Store the decoded content and whether it's JSON
+                    try {
+                        const jsonObject = JSON.parse(decodedString);
+                        decodedParts.push(JSON.stringify(jsonObject, null, 4));
+                        wasJson.push(true);
+                    } catch (jsonError) {
+                        decodedParts.push(decodedString);
+                        wasJson.push(false);
+                    }
+                } catch (e) {
+                    // Not a valid base64 string, regex was too greedy. Ignore and continue.
                 }
-            } catch (e) {
-                errorMessage.textContent = 'Error: Invalid Base64 string. Please check your input.';
             }
+            // Add the final trailing text fragment
+            textFragments.push(rawInput.substring(lastIndex));
+
+            if (replacements === 0) {
+                errorMessage.textContent = 'Could not find any valid Base64 strings to decode.';
+                decodedOutput.value = '';
+                return;
+            }
+
+            // Build the editable output string
+            let output = '';
+            for (let i = 0; i < decodedParts.length; i++) {
+                const blockType = wasJson[i] ? 'JSON' : 'TEXT';
+                output += `---DECODED ${blockType} BLOCK ${i + 1}---\n`;
+                output += decodedParts[i];
+                output += `\n---END DECODED BLOCK ${i + 1}---\n\n`;
+            }
+            decodedOutput.value = output.trim();
+            errorMessage.textContent = `Successfully decoded ${replacements} string(s).`;
         });
 
         document.getElementById('encode-button').addEventListener('click', () => {
             clearState();
-            encodedInput.value = '';
-
-            if (!decodedOutput.value) {
-                errorMessage.textContent = 'Decoded JSON input cannot be empty.';
+            const editedText = decodedOutput.value;
+            if (!editedText) {
+                errorMessage.textContent = 'Cannot encode empty content.';
                 return;
             }
 
-            try {
-                // First, validate that it's proper JSON
-                const jsonObject = JSON.parse(decodedOutput.value);
-                // Stringify without pretty print for compactness
-                const compactJsonString = JSON.stringify(jsonObject);
-                // Encode to Base64
-                encodedInput.value = btoa(compactJsonString);
-            } catch (e) {
-                errorMessage.textContent = 'Error: Invalid JSON. Please check the syntax.';
+            // Regex to capture the content inside our decoded blocks
+            const decodedBlockRegex = /---DECODED (JSON|TEXT) BLOCK \d+---\n([\s\S]*?)\n---END DECODED BLOCK \d+---/g;
+            
+            let match;
+            const newEncodedParts = [];
+            let blockIndex = 0;
+
+            while ((match = decodedBlockRegex.exec(editedText)) !== null) {
+                let contentToEncode = match[2];
+                try {
+                    if (wasJson[blockIndex]) {
+                         // Validate and compact the JSON before encoding
+                        const jsonObject = JSON.parse(contentToEncode);
+                        contentToEncode = JSON.stringify(jsonObject);
+                    }
+                    newEncodedParts.push(btoa(contentToEncode));
+                    blockIndex++;
+                } catch (e) {
+                     errorMessage.textContent = `Error: Invalid JSON in Block ${blockIndex + 1}. Please check syntax.`;
+                     return;
+                }
             }
+
+            if (textFragments.length !== newEncodedParts.length + 1) {
+                errorMessage.textContent = 'Error: Structure mismatch. Cannot reliably encode.';
+                return;
+            }
+
+            // Reconstruct the original string with the new encoded parts
+            let finalString = '';
+            for (let i = 0; i < newEncodedParts.length; i++) {
+                finalString += textFragments[i] + newEncodedParts[i];
+            }
+            finalString += textFragments[textFragments.length - 1]; // add the last fragment
+
+            encodedInput.value = finalString;
+            errorMessage.textContent = 'Successfully encoded content back to original format.';
         });
 
         function setupCopyButton(buttonId, inputId) {
@@ -143,7 +180,6 @@
                 if(navigator.clipboard && window.isSecureContext) {
                     navigator.clipboard.writeText(input.value);
                 } else {
-                    // Fallback for older browsers
                     input.select();
                     document.execCommand('copy');
                 }
@@ -156,7 +192,7 @@
             });
         }
 
-        setupCopyButton('copy-encoded', 'encoded-input');
+        setupCopyButton('copy-input', 'encoded-input');
         setupCopyButton('copy-decoded', 'decoded-output');
 
     </script>
