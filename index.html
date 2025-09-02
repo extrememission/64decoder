@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Base64 & JSON Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            width: 140px;
+            background-color: #555;
+            color: #fff;
+            text-align: center;
+            border-radius: 6px;
+            padding: 5px;
+            position: absolute;
+            z-index: 1;
+            bottom: 150%;
+            left: 50%;
+            margin-left: -70px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .tooltip .tooltiptext::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #555 transparent transparent transparent;
+        }
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200 flex items-center justify-center min-h-screen p-4">
+    <div class="w-full max-w-6xl p-8 space-y-6 bg-gray-800 rounded-lg shadow-lg">
+        <div>
+            <h1 class="text-3xl font-bold text-center text-white">Secure Base64 & JSON Tool</h1>
+            <p class="text-center text-gray-400 mt-2">All encoding and decoding happens locally in your browser.</p>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-8 items-start">
+            <!-- Encoded Side -->
+            <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                    <label for="encoded-input" class="text-lg font-medium text-gray-300">Encoded String</label>
+                    <button id="copy-encoded" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Copy</button>
+                </div>
+                <textarea id="encoded-input" rows="15" class="w-full p-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Paste your encoded text string here..."></textarea>
+                <button id="decode-button" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-semibold transition-colors">
+                    &darr; Decode &darr;
+                </button>
+            </div>
+
+            <!-- Decoded Side -->
+            <div class="space-y-4">
+                 <div class="flex justify-between items-center">
+                    <label for="decoded-output" class="text-lg font-medium text-gray-300">Decoded JSON</label>
+                    <button id="copy-decoded" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Copy</button>
+                </div>
+                <textarea id="decoded-output" rows="15" class="w-full p-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200 focus:ring-2 focus:ring-green-500 focus:border-green-500" placeholder="Decoded JSON will appear here..."></textarea>
+                <button id="encode-button" class="w-full py-3 px-4 bg-green-600 hover:bg-green-700 rounded-md text-white font-semibold transition-colors">
+                    &uarr; Encode &uarr;
+                </button>
+            </div>
+        </div>
+        
+        <p id="error-message" class="text-red-400 text-center text-sm h-5"></p>
+
+    </div>
+
+    <script>
+        const encodedInput = document.getElementById('encoded-input');
+        const decodedOutput = document.getElementById('decoded-output');
+        const errorMessage = document.getElementById('error-message');
+
+        function clearState() {
+            errorMessage.textContent = '';
+        }
+
+        document.getElementById('decode-button').addEventListener('click', () => {
+            clearState();
+            decodedOutput.value = '';
+
+            if (!encodedInput.value) {
+                errorMessage.textContent = 'Encoded input cannot be empty.';
+                return;
+            }
+
+            try {
+                const decodedString = atob(encodedInput.value);
+                try {
+                    const jsonObject = JSON.parse(decodedString);
+                    decodedOutput.value = JSON.stringify(jsonObject, null, 4);
+                } catch (jsonError) {
+                    decodedOutput.value = decodedString;
+                    errorMessage.textContent = 'Note: Decoded text was not valid JSON, showing raw output.';
+                }
+            } catch (e) {
+                errorMessage.textContent = 'Error: Invalid Base64 string. Please check your input.';
+            }
+        });
+
+        document.getElementById('encode-button').addEventListener('click', () => {
+            clearState();
+            encodedInput.value = '';
+
+            if (!decodedOutput.value) {
+                errorMessage.textContent = 'Decoded JSON input cannot be empty.';
+                return;
+            }
+
+            try {
+                // First, validate that it's proper JSON
+                const jsonObject = JSON.parse(decodedOutput.value);
+                // Stringify without pretty print for compactness
+                const compactJsonString = JSON.stringify(jsonObject);
+                // Encode to Base64
+                encodedInput.value = btoa(compactJsonString);
+            } catch (e) {
+                errorMessage.textContent = 'Error: Invalid JSON. Please check the syntax.';
+            }
+        });
+
+        function setupCopyButton(buttonId, inputId) {
+             document.getElementById(buttonId).addEventListener('click', () => {
+                const input = document.getElementById(inputId);
+                if(navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(input.value);
+                } else {
+                    // Fallback for older browsers
+                    input.select();
+                    document.execCommand('copy');
+                }
+                
+                const originalText = document.getElementById(buttonId).innerText;
+                document.getElementById(buttonId).innerText = 'Copied!';
+                setTimeout(() => {
+                   document.getElementById(buttonId).innerText = originalText;
+                }, 1500);
+            });
+        }
+
+        setupCopyButton('copy-encoded', 'encoded-input');
+        setupCopyButton('copy-decoded', 'decoded-output');
+
+    </script>
+</body>
+</html>
+
