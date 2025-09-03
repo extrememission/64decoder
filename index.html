@@ -9,6 +9,9 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+        .custom-button-group button {
+            margin-left: 8px;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 flex items-center justify-center min-h-screen p-4">
@@ -23,7 +26,10 @@
             <div class="space-y-4">
                 <div class="flex justify-between items-center">
                     <label for="encoded-input" class="text-lg font-medium text-gray-300">Input / Output</label>
-                    <button id="copy-input" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Copy</button>
+                    <div class="custom-button-group">
+                        <button id="load-input" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Load File</button>
+                        <button id="copy-input" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Copy</button>
+                    </div>
                 </div>
                 <textarea id="encoded-input" rows="15" class="w-full p-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Paste your text with encoded strings here..."></textarea>
                 <button id="decode-button" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 rounded-md text-white font-semibold transition-colors">
@@ -35,7 +41,10 @@
             <div class="space-y-4">
                  <div class="flex justify-between items-center">
                     <label for="decoded-output" class="text-lg font-medium text-gray-300">Edit Decoded Text</label>
-                    <button id="copy-decoded" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Copy</button>
+                     <div class="custom-button-group">
+                        <button id="load-decoded" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Load File</button>
+                        <button id="copy-decoded" class="px-3 py-1 text-sm bg-gray-600 hover:bg-gray-500 rounded-md">Copy</button>
+                    </div>
                 </div>
                 <textarea id="decoded-output" rows="15" class="w-full p-4 bg-gray-700 border border-gray-600 rounded-md text-gray-200 focus:ring-2 focus:ring-green-500 focus:border-green-500" placeholder="Editable decoded text will appear here..."></textarea>
                 <button id="encode-button" class="w-full py-3 px-4 bg-green-600 hover:bg-green-700 rounded-md text-white font-semibold transition-colors">
@@ -46,6 +55,9 @@
         
         <p id="error-message" class="text-red-400 text-center text-sm h-5"></p>
 
+        <!-- Hidden file inputs -->
+        <input type="file" id="file-input-left" class="hidden" accept=".txt,.json,.text">
+        <input type="file" id="file-input-right" class="hidden" accept=".txt,.json,.text">
     </div>
 
     <script>
@@ -53,9 +65,7 @@
         const decodedOutput = document.getElementById('decoded-output');
         const errorMessage = document.getElementById('error-message');
 
-        // This will store the parts of the string that are NOT base64
         let textFragments = [];
-        // This will store whether a decoded part was originally JSON
         let wasJson = [];
 
         function clearState() {
@@ -74,7 +84,6 @@
             wasJson = [];
             const decodedParts = [];
             
-            // Regex to find potential base64 strings (long sequences of valid chars)
             const base64Regex = /([A-Za-z0-9+/=]{20,})|([A-Za-z0-9+/=]+\\u002B[A-Za-z0-9+/=]+)/g;
             let lastIndex = 0;
             let match;
@@ -84,16 +93,14 @@
                 const potentialString = match[0];
                 try {
                     const cleanString = potentialString.replace(/\\u002B/g, '+');
-                    const decodedString = atob(cleanString);
+                    const paddedString = cleanString.padEnd(Math.ceil(cleanString.length / 4) * 4, '=');
+                    const decodedString = atob(paddedString);
                     
-                    // If we are here, it's a valid Base64 string.
                     replacements++;
                     
-                    // Store the text before this match
                     textFragments.push(rawInput.substring(lastIndex, match.index));
                     lastIndex = match.index + potentialString.length;
                     
-                    // Store the decoded content and whether it's JSON
                     try {
                         const jsonObject = JSON.parse(decodedString);
                         decodedParts.push(JSON.stringify(jsonObject, null, 4));
@@ -103,10 +110,9 @@
                         wasJson.push(false);
                     }
                 } catch (e) {
-                    // Not a valid base64 string, regex was too greedy. Ignore and continue.
+                    // Ignore and continue
                 }
             }
-            // Add the final trailing text fragment
             textFragments.push(rawInput.substring(lastIndex));
 
             if (replacements === 0) {
@@ -115,7 +121,6 @@
                 return;
             }
 
-            // Build the editable output string
             let output = '';
             for (let i = 0; i < decodedParts.length; i++) {
                 const blockType = wasJson[i] ? 'JSON' : 'TEXT';
@@ -135,7 +140,6 @@
                 return;
             }
 
-            // Regex to capture the content inside our decoded blocks
             const decodedBlockRegex = /---DECODED (JSON|TEXT) BLOCK \d+---\n([\s\S]*?)\n---END DECODED BLOCK \d+---/g;
             
             let match;
@@ -146,7 +150,6 @@
                 let contentToEncode = match[2];
                 try {
                     if (wasJson[blockIndex]) {
-                         // Validate and compact the JSON before encoding
                         const jsonObject = JSON.parse(contentToEncode);
                         contentToEncode = JSON.stringify(jsonObject);
                     }
@@ -163,12 +166,11 @@
                 return;
             }
 
-            // Reconstruct the original string with the new encoded parts
             let finalString = '';
             for (let i = 0; i < newEncodedParts.length; i++) {
                 finalString += textFragments[i] + newEncodedParts[i];
             }
-            finalString += textFragments[textFragments.length - 1]; // add the last fragment
+            finalString += textFragments[textFragments.length - 1];
 
             encodedInput.value = finalString;
             errorMessage.textContent = 'Successfully encoded content back to original format.';
@@ -191,9 +193,38 @@
                 }, 1500);
             });
         }
+        
+        function setupLoadButton(buttonId, fileInputId, targetTextareaId) {
+            const loadButton = document.getElementById(buttonId);
+            const fileInput = document.getElementById(fileInputId);
+            const targetTextarea = document.getElementById(targetTextareaId);
+
+            loadButton.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (!file) {
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    targetTextarea.value = e.target.result;
+                };
+                reader.onerror = () => {
+                    errorMessage.textContent = 'Error reading file.';
+                };
+                reader.readAsText(file);
+                // Reset file input to allow loading the same file again
+                event.target.value = '';
+            });
+        }
 
         setupCopyButton('copy-input', 'encoded-input');
         setupCopyButton('copy-decoded', 'decoded-output');
+        setupLoadButton('load-input', 'file-input-left', 'encoded-input');
+        setupLoadButton('load-decoded', 'file-input-right', 'decoded-output');
 
     </script>
 </body>
